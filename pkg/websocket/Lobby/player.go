@@ -3,15 +3,16 @@ package websocketlobby
 import (
 	"encoding/json"
 	"log"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
 
 type Player struct {
-	ID       string `json:"id"`
-	Conn     *websocket.Conn
-	Lobby    *Lobby
-	Username string `json:"username"`
+	ID       string          `json:"id"`
+	Conn     *websocket.Conn `json:"-"`
+	Lobby    *Lobby          `json:"-"`
+	Username string          `json:"username"`
 }
 
 type PlayerDTO struct {
@@ -35,9 +36,26 @@ type BattleMessage struct {
 	PlayerId string `json:"playerId"`
 }
 
+type BattleAnswerMessage struct {
+	Type     string `json:"type"`
+	BattleId string `json:"battleId"`
+}
+
 type BattleRegistration struct {
 	PlayerOneId string
 	PlayerTwoId string
+}
+
+type BattleFillMessage struct {
+	Type     string `json:"type"`
+	BattleId string `json:"battleId"`
+	ColIndex int    `json:"colIndex"`
+}
+
+type BattleFill struct {
+	PlayerId string `json:"playerId"`
+	BattleId string `json:"battleId"`
+	ColIndex int    `json:"colIndex"`
 }
 
 func (c *Player) Read() {
@@ -53,20 +71,42 @@ func (c *Player) Read() {
 			return
 		}
 
-		battleMessage := BattleMessage{}
+		message := string(bytes)
 
-		errorParsing := json.Unmarshal(bytes, &battleMessage)
+		if strings.Contains(message, "\"type\":\"battle\"") {
+			battleMessage := BattleMessage{}
 
-		if errorParsing != nil {
-			log.Println("error on parsing", errorParsing)
-			return
-		}
+			errorParsing := json.Unmarshal(bytes, &battleMessage)
 
-		switch battleMessage.Type {
-		case "battle":
+			if errorParsing != nil {
+				log.Println("error on parsing", errorParsing)
+				continue
+			}
 			c.Lobby.BattleRegistration <- BattleRegistration{c.ID, battleMessage.PlayerId}
-			break
-		default:
+		} else if strings.Contains(message, "\"type\":\"accept\"") {
+			battleAnswerMessage := BattleAnswerMessage{}
+			errorParsing := json.Unmarshal(bytes, &battleAnswerMessage)
+			if errorParsing != nil {
+				log.Println("error on parsing", errorParsing)
+				continue
+			}
+			c.Lobby.BattleAccept <- battleAnswerMessage.BattleId
+		} else if strings.Contains(message, "\"type\":\"decline\"") {
+			battleAnswerMessage := BattleAnswerMessage{}
+			errorParsing := json.Unmarshal(bytes, &battleAnswerMessage)
+			if errorParsing != nil {
+				log.Println("error on parsing", errorParsing)
+				continue
+			}
+			c.Lobby.BattleDecline <- battleAnswerMessage.BattleId
+		} else if strings.Contains(message, "\"type\":\"fill\"") {
+			battleFillMessage := BattleFillMessage{}
+			errorParsing := json.Unmarshal(bytes, &battleFillMessage)
+			if errorParsing != nil {
+				log.Println("error on parsing", errorParsing)
+				continue
+			}
+			c.Lobby.BattleFill <- BattleFill{c.ID, battleFillMessage.BattleId, battleFillMessage.ColIndex}
 		}
 	}
 }

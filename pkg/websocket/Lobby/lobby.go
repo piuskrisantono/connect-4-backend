@@ -8,11 +8,20 @@ type Lobby struct {
 	Players            []*Player
 	BattleRegistration chan BattleRegistration
 	Battles            map[string]*BattleRoom
+	BattleAccept       chan string
+	BattleDecline      chan string
+	BattleFill         chan BattleFill
 }
 
 type BattleRoom struct {
-	PlayerOne *Player
-	PlayerTwo *Player
+	PlayerOne *Player `json:"playerOne"`
+	PlayerTwo *Player `json:"playerTwo"`
+}
+
+type BattleInfo struct {
+	Type       string     `json:"type"`
+	BattleId   string     `json:"battleId"`
+	BattleRoom BattleRoom `json:"battleRoom"`
 }
 
 func NewLobby() *Lobby {
@@ -22,6 +31,9 @@ func NewLobby() *Lobby {
 		Players:            []*Player{},
 		BattleRegistration: make(chan BattleRegistration),
 		Battles:            make(map[string]*BattleRoom),
+		BattleAccept:       make(chan string),
+		BattleDecline:      make(chan string),
+		BattleFill:         make(chan BattleFill),
 	}
 }
 
@@ -67,6 +79,18 @@ func (lobby *Lobby) Start() {
 			if err := battleRoom.PlayerTwo.Conn.WriteJSON(battleConfirmationMessage); err != nil {
 				fmt.Println(err)
 			}
+		case battleId := <-lobby.BattleAccept:
+			battleRoom := lobby.Battles[battleId]
+			battleRoom.PlayerOne.Conn.WriteJSON(BattleInfo{"accept", battleId, *battleRoom})
+		case battleId := <-lobby.BattleDecline:
+			delete(lobby.Battles, battleId)
+		case battleFill := <-lobby.BattleFill:
+			battleRoom := lobby.Battles[battleFill.BattleId]
+			connectionToSend := battleRoom.PlayerOne.Conn
+			if battleFill.PlayerId == battleRoom.PlayerOne.ID {
+				connectionToSend = battleRoom.PlayerTwo.Conn
+			}
+			connectionToSend.WriteJSON(BattleFillMessage{"fill", "", battleFill.ColIndex})
 		}
 	}
 }
