@@ -15,20 +15,20 @@ type Player struct {
 	Username string          `json:"username"`
 }
 
-type PlayerDTO struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-}
+// type Message struct {
+// 	Type string `json:"type"`
+// 	Content json.RawMessage `json:"content"`
+// }
 
 type PlayersMessage struct {
-	Type    string      `json:"type"`
-	Players []PlayerDTO `json:"players"`
+	Type    string    `json:"type"`
+	Players []*Player `json:"players"`
 }
 
 type BattleConfirmationMessage struct {
-	Type      string    `json:"type"`
-	BattleId  string    `json:"battleId"`
-	PlayerOne PlayerDTO `json:"playerOne"`
+	Type      string `json:"type"`
+	BattleId  string `json:"battleId"`
+	PlayerOne Player `json:"playerOne"`
 }
 
 type BattleMessage struct {

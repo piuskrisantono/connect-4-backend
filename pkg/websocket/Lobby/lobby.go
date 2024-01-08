@@ -71,9 +71,12 @@ func (lobby *Lobby) Start() {
 			lobby.Battles[battleId] = &battleRoom
 
 			battleConfirmationMessage := BattleConfirmationMessage{
-				Type:      "confirmation",
-				BattleId:  battleId,
-				PlayerOne: PlayerDTO{battleRoom.PlayerOne.ID, battleRoom.PlayerOne.Username},
+				Type:     "confirmation",
+				BattleId: battleId,
+				PlayerOne: Player{
+					ID:       battleRoom.PlayerOne.ID,
+					Username: battleRoom.PlayerOne.Username,
+				},
 			}
 
 			if err := battleRoom.PlayerTwo.Conn.WriteJSON(battleConfirmationMessage); err != nil {
@@ -99,16 +102,8 @@ func (lobby *Lobby) broadcastPlayers() {
 	for _, player := range lobby.Players {
 		playersMessage := PlayersMessage{
 			Type:    "players",
-			Players: lobby.generatePlayerDTOS(),
+			Players: lobby.Players,
 		}
 		player.Conn.WriteJSON(playersMessage)
 	}
-}
-
-func (lobby *Lobby) generatePlayerDTOS() []PlayerDTO {
-	playerDTOS := []PlayerDTO{}
-	for _, player := range lobby.Players {
-		playerDTOS = append(playerDTOS, PlayerDTO{player.ID, player.Username})
-	}
-	return playerDTOS
 }
