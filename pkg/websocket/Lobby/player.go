@@ -14,15 +14,10 @@ type Player struct {
 	Username string          `json:"username"`
 }
 
-type Message struct {
-	Type    string          `json:"type"`
-	Content json.RawMessage `json:"content"`
-}
-
-type BattleFillRequest struct {
-	Type     string `json:"type"`
-	BattleId string `json:"battleId"`
-	ColIndex int    `json:"colIndex"`
+type BattleMessage struct {
+	Type     string          `json:"type"`
+	Content  json.RawMessage `json:"content"`
+	PlayerId string
 }
 
 func (p *Player) Read() {
@@ -38,48 +33,16 @@ func (p *Player) Read() {
 			return
 		}
 
-		message := Message{}
+		battleMessage := BattleMessage{}
 
-		errorParsingMessage := json.Unmarshal(bytes, &message)
+		errorParsingMessage := json.Unmarshal(bytes, &battleMessage)
 		if errorParsingMessage != nil {
 			log.Println("error on parsing", errorParsingMessage)
 			continue
 		}
 
-		switch message.Type {
-		case "battle":
-			var playerId string
-			errorParsing := json.Unmarshal(message.Content, &playerId)
-			if errorParsing != nil {
-				log.Println("error on parsing battle message", errorParsing)
-				continue
-			}
-			p.Lobby.BattleRegistration <- BattleRegistration{p.ID, playerId}
-		case "accept":
-			var battleId string
-			errorParsing := json.Unmarshal(message.Content, &battleId)
-			if errorParsing != nil {
-				log.Println("error on parsing accept message", errorParsing)
-				continue
-			}
-			p.Lobby.BattleAccept <- battleId
-		case "decline":
-			var battleId string
-			errorParsing := json.Unmarshal(message.Content, &battleId)
-			if errorParsing != nil {
-				log.Println("error on parsing decline message", errorParsing)
-				continue
-			}
-			p.Lobby.BattleDecline <- battleId
-		case "fill":
-			battleFillRequest := BattleFillRequest{}
-			errorParsing := json.Unmarshal(message.Content, &battleFillRequest)
-			if errorParsing != nil {
-				log.Println("error on parsing fill message", errorParsing)
-				continue
-			}
-			p.Lobby.BattleFill <- BattleFill{p.ID, battleFillRequest.BattleId, battleFillRequest.ColIndex}
-		default:
-		}
+		battleMessage.PlayerId = p.ID
+
+		p.Lobby.BattleMessage <- &battleMessage
 	}
 }
