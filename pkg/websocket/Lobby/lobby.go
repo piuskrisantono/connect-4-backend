@@ -121,7 +121,7 @@ func (lobby *Lobby) Start() {
 				}
 				battleRoom := lobby.Battles[battleId]
 				battleRoom.PlayerOne.Conn.WriteJSON(BattleInfoResponse{"accept", battleId, *battleRoom})
-			case "decline":
+			case "decline", "over":
 				var battleId string
 				errorParsing := json.Unmarshal(message.Content, &battleId)
 				if errorParsing != nil {
