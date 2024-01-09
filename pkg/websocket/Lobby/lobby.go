@@ -18,10 +18,37 @@ type BattleRoom struct {
 	PlayerTwo *Player `json:"playerTwo"`
 }
 
-type BattleInfo struct {
+type BattleRegistration struct {
+	PlayerOneId string
+	PlayerTwoId string
+}
+
+type BattleFill struct {
+	PlayerId string `json:"playerId"`
+	BattleId string `json:"battleId"`
+	ColIndex int    `json:"colIndex"`
+}
+
+type BattleInfoResponse struct {
 	Type       string     `json:"type"`
 	BattleId   string     `json:"battleId"`
 	BattleRoom BattleRoom `json:"battleRoom"`
+}
+
+type PlayersResponse struct {
+	Type    string    `json:"type"`
+	Players []*Player `json:"players"`
+}
+
+type BattleConfirmationResponse struct {
+	Type      string `json:"type"`
+	BattleId  string `json:"battleId"`
+	PlayerOne Player `json:"playerOne"`
+}
+
+type BattleFillResponse struct {
+	Type     string `json:"type"`
+	ColIndex int    `json:"colIndex"`
 }
 
 func NewLobby() *Lobby {
@@ -70,7 +97,7 @@ func (lobby *Lobby) Start() {
 
 			lobby.Battles[battleId] = &battleRoom
 
-			battleConfirmationMessage := BattleConfirmationMessage{
+			battleConfirmationMessage := BattleConfirmationResponse{
 				Type:     "confirmation",
 				BattleId: battleId,
 				PlayerOne: Player{
@@ -84,7 +111,7 @@ func (lobby *Lobby) Start() {
 			}
 		case battleId := <-lobby.BattleAccept:
 			battleRoom := lobby.Battles[battleId]
-			battleRoom.PlayerOne.Conn.WriteJSON(BattleInfo{"accept", battleId, *battleRoom})
+			battleRoom.PlayerOne.Conn.WriteJSON(BattleInfoResponse{"accept", battleId, *battleRoom})
 		case battleId := <-lobby.BattleDecline:
 			delete(lobby.Battles, battleId)
 		case battleFill := <-lobby.BattleFill:
@@ -93,14 +120,14 @@ func (lobby *Lobby) Start() {
 			if battleFill.PlayerId == battleRoom.PlayerOne.ID {
 				connectionToSend = battleRoom.PlayerTwo.Conn
 			}
-			connectionToSend.WriteJSON(BattleFillMessage{"fill", "", battleFill.ColIndex})
+			connectionToSend.WriteJSON(BattleFillResponse{"fill", battleFill.ColIndex})
 		}
 	}
 }
 
 func (lobby *Lobby) broadcastPlayers() {
 	for _, player := range lobby.Players {
-		playersMessage := PlayersMessage{
+		playersMessage := PlayersResponse{
 			Type:    "players",
 			Players: lobby.Players,
 		}

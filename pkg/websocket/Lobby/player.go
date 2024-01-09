@@ -3,7 +3,6 @@ package websocketlobby
 import (
 	"encoding/json"
 	"log"
-	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -15,98 +14,72 @@ type Player struct {
 	Username string          `json:"username"`
 }
 
-// type Message struct {
-// 	Type string `json:"type"`
-// 	Content json.RawMessage `json:"content"`
-// }
-
-type PlayersMessage struct {
-	Type    string    `json:"type"`
-	Players []*Player `json:"players"`
+type Message struct {
+	Type    string          `json:"type"`
+	Content json.RawMessage `json:"content"`
 }
 
-type BattleConfirmationMessage struct {
-	Type      string `json:"type"`
-	BattleId  string `json:"battleId"`
-	PlayerOne Player `json:"playerOne"`
-}
-
-type BattleMessage struct {
-	Type     string `json:"type"`
-	PlayerId string `json:"playerId"`
-}
-
-type BattleAnswerMessage struct {
-	Type     string `json:"type"`
-	BattleId string `json:"battleId"`
-}
-
-type BattleRegistration struct {
-	PlayerOneId string
-	PlayerTwoId string
-}
-
-type BattleFillMessage struct {
+type BattleFillRequest struct {
 	Type     string `json:"type"`
 	BattleId string `json:"battleId"`
 	ColIndex int    `json:"colIndex"`
 }
 
-type BattleFill struct {
-	PlayerId string `json:"playerId"`
-	BattleId string `json:"battleId"`
-	ColIndex int    `json:"colIndex"`
-}
-
-func (c *Player) Read() {
+func (p *Player) Read() {
 	defer func() {
-		c.Lobby.Unregister <- c
-		c.Conn.Close()
+		p.Lobby.Unregister <- p
+		p.Conn.Close()
 	}()
 
 	for {
-		_, bytes, err := c.Conn.ReadMessage()
+		_, bytes, err := p.Conn.ReadMessage()
 		if err != nil {
 			log.Println("error on read message", err)
 			return
 		}
 
-		message := string(bytes)
+		message := Message{}
 
-		if strings.Contains(message, "\"type\":\"battle\"") {
-			battleMessage := BattleMessage{}
+		errorParsingMessage := json.Unmarshal(bytes, &message)
+		if errorParsingMessage != nil {
+			log.Println("error on parsing", errorParsingMessage)
+			continue
+		}
 
-			errorParsing := json.Unmarshal(bytes, &battleMessage)
-
+		switch message.Type {
+		case "battle":
+			var playerId string
+			errorParsing := json.Unmarshal(message.Content, &playerId)
 			if errorParsing != nil {
-				log.Println("error on parsing", errorParsing)
+				log.Println("error on parsing battle message", errorParsing)
 				continue
 			}
-			c.Lobby.BattleRegistration <- BattleRegistration{c.ID, battleMessage.PlayerId}
-		} else if strings.Contains(message, "\"type\":\"accept\"") {
-			battleAnswerMessage := BattleAnswerMessage{}
-			errorParsing := json.Unmarshal(bytes, &battleAnswerMessage)
+			p.Lobby.BattleRegistration <- BattleRegistration{p.ID, playerId}
+		case "accept":
+			var battleId string
+			errorParsing := json.Unmarshal(message.Content, &battleId)
 			if errorParsing != nil {
-				log.Println("error on parsing", errorParsing)
+				log.Println("error on parsing accept message", errorParsing)
 				continue
 			}
-			c.Lobby.BattleAccept <- battleAnswerMessage.BattleId
-		} else if strings.Contains(message, "\"type\":\"decline\"") {
-			battleAnswerMessage := BattleAnswerMessage{}
-			errorParsing := json.Unmarshal(bytes, &battleAnswerMessage)
+			p.Lobby.BattleAccept <- battleId
+		case "decline":
+			var battleId string
+			errorParsing := json.Unmarshal(message.Content, &battleId)
 			if errorParsing != nil {
-				log.Println("error on parsing", errorParsing)
+				log.Println("error on parsing decline message", errorParsing)
 				continue
 			}
-			c.Lobby.BattleDecline <- battleAnswerMessage.BattleId
-		} else if strings.Contains(message, "\"type\":\"fill\"") {
-			battleFillMessage := BattleFillMessage{}
-			errorParsing := json.Unmarshal(bytes, &battleFillMessage)
+			p.Lobby.BattleDecline <- battleId
+		case "fill":
+			battleFillRequest := BattleFillRequest{}
+			errorParsing := json.Unmarshal(message.Content, &battleFillRequest)
 			if errorParsing != nil {
-				log.Println("error on parsing", errorParsing)
+				log.Println("error on parsing fill message", errorParsing)
 				continue
 			}
-			c.Lobby.BattleFill <- BattleFill{c.ID, battleFillMessage.BattleId, battleFillMessage.ColIndex}
+			p.Lobby.BattleFill <- BattleFill{p.ID, battleFillRequest.BattleId, battleFillRequest.ColIndex}
+		default:
 		}
 	}
 }
