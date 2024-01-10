@@ -53,6 +53,10 @@ type EnemyDisconnectedResponse struct {
 	Player *Player `json:"player"`
 }
 
+type EnemyDoesNotAcceptResponse struct {
+	Type string `json:"type"`
+}
+
 func NewLobby() *Lobby {
 	return &Lobby{
 		Register:      make(chan *Player),
@@ -144,13 +148,15 @@ func (lobby *Lobby) Start() {
 				}
 				battleRoom := lobby.BattleRooms[battleId]
 				battleRoom.PlayerOne.Conn.WriteJSON(BattleInfoResponse{"accept", battleId, *battleRoom})
-			case "decline", "over":
+			case "decline":
 				var battleId string
 				errorParsing := json.Unmarshal(message.Content, &battleId)
 				if errorParsing != nil {
 					log.Println("error on parsing decline message", errorParsing)
 					continue
 				}
+				battleRoom := lobby.BattleRooms[battleId]
+				battleRoom.PlayerOne.Conn.WriteJSON(EnemyDoesNotAcceptResponse{"decline"})
 				delete(lobby.BattleRooms, battleId)
 			case "fill":
 				battleFillRequest := BattleFillRequest{}
@@ -165,6 +171,14 @@ func (lobby *Lobby) Start() {
 					connectionToSend = battleRoom.PlayerTwo.Conn
 				}
 				connectionToSend.WriteJSON(BattleFillResponse{"fill", battleFillRequest.ColIndex})
+			case "over":
+				var battleId string
+				errorParsing := json.Unmarshal(message.Content, &battleId)
+				if errorParsing != nil {
+					log.Println("error on parsing over message", errorParsing)
+					continue
+				}
+				delete(lobby.BattleRooms, battleId)
 			default:
 			}
 		}
