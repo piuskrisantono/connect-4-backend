@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 )
 
 type Lobby struct {
 	Register      chan *Player
 	Unregister    chan *Player
 	Players       []*Player
-	Battles       map[string]*BattleRoom
+	BattleRooms   map[string]*BattleRoom
 	BattleMessage chan *BattleMessage
 }
 
@@ -47,12 +48,17 @@ type BattleFillResponse struct {
 	ColIndex int    `json:"colIndex"`
 }
 
+type EnemyDisconnectedResponse struct {
+	Type   string  `json:"type"`
+	Player *Player `json:"player"`
+}
+
 func NewLobby() *Lobby {
 	return &Lobby{
 		Register:      make(chan *Player),
 		Unregister:    make(chan *Player),
 		Players:       []*Player{},
-		Battles:       make(map[string]*BattleRoom),
+		BattleRooms:   make(map[string]*BattleRoom),
 		BattleMessage: make(chan *BattleMessage),
 	}
 }
@@ -61,7 +67,12 @@ func (lobby *Lobby) Start() {
 	for {
 		select {
 		case newPlayer := <-lobby.Register:
-			lobby.Players = append(lobby.Players, newPlayer)
+			existingPlayer := lobby.findPlayerById(newPlayer.ID)
+			if existingPlayer != nil {
+				existingPlayer.Conn = newPlayer.Conn
+			} else {
+				lobby.Players = append(lobby.Players, newPlayer)
+			}
 			lobby.broadcastPlayers()
 		case dcPlayer := <-lobby.Unregister:
 			newPlayers := []*Player{}
@@ -72,6 +83,18 @@ func (lobby *Lobby) Start() {
 			}
 			lobby.Players = newPlayers
 			lobby.broadcastPlayers()
+
+			existingBattleRoomId := lobby.findBattleRoomIdByPlayerId(dcPlayer.ID)
+			if existingBattleRoomId != "" {
+				existingBattleRoom := lobby.BattleRooms[existingBattleRoomId]
+				playerToInformConn := existingBattleRoom.PlayerOne.Conn
+				if existingBattleRoom.PlayerOne.ID == dcPlayer.ID {
+					playerToInformConn = existingBattleRoom.PlayerTwo.Conn
+				}
+
+				playerToInformConn.WriteJSON(EnemyDisconnectedResponse{"disconnect", dcPlayer})
+				delete(lobby.BattleRooms, existingBattleRoomId)
+			}
 		case message := <-lobby.BattleMessage:
 			currentPlayerId := message.PlayerId
 
@@ -98,7 +121,7 @@ func (lobby *Lobby) Start() {
 
 				battleId := currentPlayerId + playerTwoId
 
-				lobby.Battles[battleId] = &battleRoom
+				lobby.BattleRooms[battleId] = &battleRoom
 
 				battleConfirmationMessage := BattleConfirmationResponse{
 					Type:     "confirmation",
@@ -119,7 +142,7 @@ func (lobby *Lobby) Start() {
 					log.Println("error on parsing accept message", errorParsing)
 					continue
 				}
-				battleRoom := lobby.Battles[battleId]
+				battleRoom := lobby.BattleRooms[battleId]
 				battleRoom.PlayerOne.Conn.WriteJSON(BattleInfoResponse{"accept", battleId, *battleRoom})
 			case "decline", "over":
 				var battleId string
@@ -128,7 +151,7 @@ func (lobby *Lobby) Start() {
 					log.Println("error on parsing decline message", errorParsing)
 					continue
 				}
-				delete(lobby.Battles, battleId)
+				delete(lobby.BattleRooms, battleId)
 			case "fill":
 				battleFillRequest := BattleFillRequest{}
 				errorParsing := json.Unmarshal(message.Content, &battleFillRequest)
@@ -136,7 +159,7 @@ func (lobby *Lobby) Start() {
 					log.Println("error on parsing fill message", errorParsing)
 					continue
 				}
-				battleRoom := lobby.Battles[battleFillRequest.BattleId]
+				battleRoom := lobby.BattleRooms[battleFillRequest.BattleId]
 				connectionToSend := battleRoom.PlayerOne.Conn
 				if currentPlayerId == battleRoom.PlayerOne.ID {
 					connectionToSend = battleRoom.PlayerTwo.Conn
@@ -156,4 +179,22 @@ func (lobby *Lobby) broadcastPlayers() {
 		}
 		player.Conn.WriteJSON(playersMessage)
 	}
+}
+
+func (lobby *Lobby) findPlayerById(id string) *Player {
+	for _, player := range lobby.Players {
+		if player.ID == id {
+			return player
+		}
+	}
+	return nil
+}
+
+func (lobby *Lobby) findBattleRoomIdByPlayerId(playerId string) string {
+	for key := range lobby.BattleRooms {
+		if strings.Contains(key, playerId) {
+			return key
+		}
+	}
+	return ""
 }
